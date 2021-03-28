@@ -44,6 +44,53 @@ def __getitem__(self, item):
 
 支持extend
 
+### `__missing__`
+
+在getitem方法找不到的时候调用missing
+
+### `__eq__`
+
+支持==
+
+### `__del__`
+
+垃圾回收时调用
+
+### `__getattr__` vs `__getattribute__`
+
+- 调用类属性x，但是x没有在类中定义时，会调用`__getattr__`
+
+```python
+class ClassName:
+    def __getattr__(self, attr_name):
+        pass
+```
+- 调用类属性x，不论x有没有在类中定义，都会先调用`__getattribute__`尽量不要重写，过于底层
+
+```python
+class ClassName:
+    def __getattribute__(self, attr_name):
+        pass
+```
+
+### `__init__` vs `__new__`
+
+new的参数是cls，是对类初始化，用来生成对象
+
+init的参数是self，是对已有对象的初始化
+
+如果new不返回对象，则不调用init
+
+```python
+class ClassName:
+    def __new__(cls, *arg, **kwargs):
+        # arg = (paraName)
+        # kwargs = {paraName, paraValue}
+        return super.__new__(cls, *arg, **kwargs):
+```
+
+
+
 ## Abstract Base Classes
 
 抽象基类
@@ -155,7 +202,7 @@ Method Resolution Order
 - 子类可以使用`实例变量._类名__私有属性`来访问
 - 类公共方法可以访问
 
-# 序列类型 Iterable 
+# 序列类型 Iterable
 
 都可以用for进行遍历
 
@@ -260,7 +307,13 @@ my_array = array.array('i')
 
 `my_set = {key for key,value in my_dict.items()}`
 
-# Dict
+# Hash表结构
+
+键值都必须是可以hash的
+
+不可变对象都是可以当作键值使用
+
+## Dict
 
 - 和list一样，都是继承collection
 - 属于MutableMapping类型，实现了MutableMapping的函数
@@ -268,6 +321,122 @@ my_array = array.array('i')
 - 不建议继承dict和list
   - C语言实现，某些时候不会调用super方法。以至于重载函数不是一直生效
   - 如果要继承，继承这个`from collection import UserDict`
+- C语言实现，性能高
+- dict内存花销大，查询速度O(1)
+- dict存储顺序和元素添加顺序有关
+
+## Set
+
+- set用任何iterable对象都可以初始化，且set不重复
+
+  - ```python
+    a_set = {'A','B'} # 一种初始化方法
+    ```
+
+- fronzenset()
+
+  - 需要初始化，之后不可改变
+  - 可用作dict的key
+
+- hash操作，性能高
+
+### 操作：集合运算
+
+- -
+  - 差集
+- |
+  - 并集
+- &
+  - 交集
+
+## 函数
+
+- `a in set`
+- `smallset.issubset(bigset)`
+
+# 垃圾回收
+
+- 垃圾回收采用的是计数。当某个变量计数为0时，回收。
+- del一次，计数器减一。
+- 垃圾回收时调用`__del__`
+
+# 元类编程 Metaclass
+
+元类是创建类的类
+
+### 类的实例化过程
+
+- 找metaclass，如有，用metaclass创建类对象
+  - 先找自己的
+  - 再找基类的metaclass，如有，则用基类的metaclass创建自己的类对象
+- 用type创建类对象
+
+### type创建类
+
+`type(classname, tuple_baseClassName, dict_classAttribute)`
+
+其中，成员函数名可以当作attribute传入
+
+### 元类的使用方式
+
+```python
+class MetaClass(type):
+    # 需要继承type，表明是一个元类
+    pass
+class newClass(metaclass=MetaClass):
+    # 用metaclass指明类的元类
+    pass
+```
+
+
+
+## @property
+
+通过property来增加类的属性`x`，可以通过`.x`来统一访问，节省了`get_x`函数
+
+```python
+class example:
+    @property
+    def x(self):
+        return self._x
+```
+
+## @x.setter
+
+通过setter来定义set属性，在下文`class_entity.x = y`时调用
+
+```python
+class example:
+    @x.setter
+    def x(self, value):
+        self._x = value
+```
+
+## 属性描述符
+
+### 数据描述符Data Descriptor
+
+- class A实现`__get__`, `__set__`, `__delete__`可以当作一对属性描述符。B类可以使用`self.a = A()`来进行类型判断
+- 此时，B类的dict里没有a这个属性，但是可以通过类A来设置和访问a的数值
+
+### 非数据描述符 Non-data descriptor
+
+- 仅仅实现`__get__`是非数据属性描述符
+
+## 属性访问顺序
+
+user.age的调用等同于user.getattr(user, 'age')，查找顺序：
+
+1. 如果age在类或基类的dict中，且为data descriptor
+   1. 则调用`__get__`方法
+2. 如果age是类对象的dict中
+   1. 则返回`obj.__dict__['age']`
+3. 如果age在类或基类的dict中，且不为data descriptor
+   1. 则调用`__get__`方法
+   2. 没有方法则`__dict__['age']`
+4. 调用`__getattribute__()`方法
+5. 如果上述抛出AttributeError，则调用`__getattr__()`（如果定义）方法
+6. 抛出AttributeError
 
 # 概念及语法使用
 
@@ -304,7 +473,19 @@ with func(argv) as f:
 
 - is判断两者的对象id是否相同
 - == 判断的是值是否相同
+- type(对象实例)是获取类的地址
 
 ## return在try模块中的执行顺序
 
 - 先 final > try > except
+
+## python变量的本质是指针
+
+- 先生成对象，再指向对象。变量寸的是这个指向
+- 对整数N in [-5, 256]，解释器对他们做了单独的处理，放进了固定的内存中，不因你每次运行而变化
+
+## 传参
+
+- 定义默认参数的情况下，如果调用时没有参数，则传递的参数为`func_name.__default__`
+- 如果class A定义`__init__(b=[])`，则 A1 = A(), A2=A(),这两个会公用一个b参数。因为默认传进的[]是一个
+
